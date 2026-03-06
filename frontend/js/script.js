@@ -5,7 +5,7 @@
 // ── API base URL ──
 const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? '/api/v1'
-  : 'https://sym-tech.onrender.com/api/v1';
+  : 'https://technical-quiz-dwt8.onrender.com/api/v1';
 
 // ── Static Config ──
 const ADMIN_PASSWORD = 'admin123';
