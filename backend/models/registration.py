@@ -8,7 +8,7 @@ class Registration(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     reg_id     = db.Column(db.String(20), unique=True, nullable=False)
     name       = db.Column(db.String(100), nullable=False)
-    roll       = db.Column(db.String(30), nullable=False)
+    roll       = db.Column(db.String(30), nullable=True)
     year       = db.Column(db.String(20), nullable=False)
     dept       = db.Column(db.String(20), nullable=False)
     phone      = db.Column(db.String(15))

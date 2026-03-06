@@ -10,15 +10,8 @@ registrations_bp = Blueprint('registrations', __name__)
 
 def _generate_reg_id():
     """Generate a registration ID like INX-XXXX."""
-    ts = int(time.time())
-    base36 = ''
-    n = ts
-    chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    while n:
-        base36 = chars[n % 36] + base36
-        n //= 36
-    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
-    return 'INX-' + base36[-4:] + suffix
+    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+    return 'INX-' + suffix
 
 
 # ── POST  /api/v1/registrations ─────────────────
@@ -34,12 +27,9 @@ def create_registration():
     email   = (data.get('email') or '').strip()
     college = (data.get('college') or '').strip() or 'CSI College of Engineering'
 
-    # Validation
-    errors = []
+    # Roll is optional in new design
     if not name:
         errors.append('Name is required.')
-    if not roll:
-        errors.append('Roll number is required.')
     if not year:
         errors.append('Year is required.')
     if not dept:
@@ -71,3 +61,19 @@ def clear_registrations():
     Registration.query.delete()
     db.session.commit()
     return jsonify({'success': True, 'message': 'All registrations cleared.'})
+
+
+# ── GET  /api/v1/registrations/export ──────────
+@registrations_bp.route('/export', methods=['GET'])
+def export_registrations():
+    regs = Registration.query.all()
+    output = "ID,RegID,Name,Year,Dept,College,QuizDone,Date\n"
+    for r in regs:
+        d = r.to_dict()
+        output += f"{d['id']},{d['regId']},{d['name']},{d['year']},{d['dept']},{d['college']},{d['quizDone']},{d['date']}\n"
+    
+    return output, 200, {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': 'attachment; filename=registrations.csv'
+    }
+

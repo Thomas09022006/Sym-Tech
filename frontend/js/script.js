@@ -1,18 +1,20 @@
-// ═══════════════════════════════════════════════
-// InnovateX Quiz Platform — Frontend (API-connected)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// InnovateX Quiz Platform — API-Connected & Refined Design
+// ═══════════════════════════════════════════════════════════
 
 // ── API base URL ──
-// Local dev:  '/api/v1'
-// Production: 'https://sym-tech.onrender.com/api/v1'
 const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? '/api/v1'
   : 'https://sym-tech.onrender.com/api/v1';
 
+// ── Static Config ──
+const ADMIN_PASSWORD = 'admin123';
+
+// ── State Variables ──
 let questions = [];       // loaded from backend
-let settings = { timer: 30, shuffle: true, shuffleOpts: false, questionsPerQuiz: 30 };
-let leaderboard = [];
+let settings = { timer: 30, shuffle: true, shuffleOpts: false, questionsPerQuiz: 40 };
 let registrations = [];
+let results = [];
 let currentParticipant = {};
 let quizQuestions = [];
 let currentQ = 0;
@@ -22,152 +24,105 @@ let answered = false;
 let selectedOption = -1;
 let totalTimeTaken = 0;
 let correctCount = 0;
-let wrongCount = 0;
-let editingId = -1;       // now uses DB id instead of array index
-let lastRegData = null;
 let tabSwitchCount = 0;
+let screenshotCount = 0;
 let quizActive = false;
-let answerLog = [];        // { questionId, selected } — sent to server on submit
-let screenshotCount = 0;   // screenshot attempt tracker
 
-// ═══════════════════════════════════════════════
-// HELPER: fetch wrapper
-// ═══════════════════════════════════════════════
-async function api(path, options = {}) {
-  const opts = { headers: { 'Content-Type': 'application/json' }, ...options };
+// ═══════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════
+window.onload = () => {
+  fetchSettings();
+};
+
+async function fetchSettings() {
   try {
-    const res = await fetch(API + path, opts);
-    return await res.json();
-  } catch (err) {
-    console.error('API error:', err);
-    return { success: false, error: 'Network error. Is the server running?' };
+    const res = await fetch(`${API}/settings`);
+    const data = await res.json();
+    if (data.success) settings = data.settings;
+  } catch (e) {
+    console.warn('Could not fetch settings:', e);
   }
 }
 
-// ═══════════════════════════════════════════════
-// ANTI-MALPRACTICE SYSTEM (Desktop + Mobile)
-// ═══════════════════════════════════════════════
-
+// ═══════════════════════════════════════════════════════════
+// ANTI-MALPRACTICE SYSTEM
+// ═══════════════════════════════════════════════════════════
 let originalViewportHeight = window.innerHeight;
 let splitScreenDetected = false;
 
-// ── Disable right-click & long-press (mobile context menu) ──
 document.addEventListener('contextmenu', function (e) {
-  if (quizActive) { e.preventDefault(); showWarningToast('⚠ Right-click / long-press is disabled!'); }
+  if (quizActive) { e.preventDefault(); showWarningToast('🚫 Right-click is DISABLED during the quiz!'); }
 });
 
-// ── Disable text selection ──
 document.addEventListener('selectstart', function (e) {
   if (quizActive) e.preventDefault();
 });
 
-// ── Block long-press on mobile (prevents copy/image-save menus) ──
 let longPressTimer = null;
 document.addEventListener('touchstart', function (e) {
   if (!quizActive) return;
   longPressTimer = setTimeout(() => {
     e.preventDefault();
-    showWarningToast('⚠ Long-press is disabled during the quiz!');
+    showWarningToast('🚫 Long-press is DISABLED during the quiz!');
   }, 400);
 }, { passive: false });
-document.addEventListener('touchend', function () {
-  clearTimeout(longPressTimer);
-});
-document.addEventListener('touchmove', function () {
-  clearTimeout(longPressTimer);
-});
+document.addEventListener('touchend', () => clearTimeout(longPressTimer));
+document.addEventListener('touchmove', () => clearTimeout(longPressTimer));
 
-// ── Block copy, cut, paste ──
 ['copy', 'cut', 'paste'].forEach(evt => {
   document.addEventListener(evt, function (e) {
-    if (quizActive) { e.preventDefault(); showWarningToast('⚠ Copy/Paste is disabled during the quiz!'); }
+    if (quizActive) { e.preventDefault(); showWarningToast('🚫 Copy/Paste is DISABLED during the quiz!'); }
   });
 });
 
-// ── Keyboard: screenshots, devtools, copy ──
 document.addEventListener('keydown', function (e) {
   if (!quizActive) return;
-
-  // ── Screenshot detection ──
-  if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
-    e.preventDefault();
-    handleScreenshotAttempt();
-    return;
-  }
-  // Windows Snipping Tool: Win+Shift+S
-  if (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S')) {
-    e.preventDefault();
-    handleScreenshotAttempt();
-    return;
-  }
-  // Mac screenshot: Cmd+Shift+3, Cmd+Shift+4, Cmd+Shift+5
-  if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
-    e.preventDefault();
-    handleScreenshotAttempt();
-    return;
-  }
-
-  // ── Existing anti-cheat keys ──
-  if (e.key === 'F12') { e.preventDefault(); showWarningToast('⚠ Developer tools are disabled!'); return; }
+  if (e.key === 'PrintScreen' || e.code === 'PrintScreen') { e.preventDefault(); handleScreenshotAttempt(); return; }
+  if (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); handleScreenshotAttempt(); return; }
+  if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) { e.preventDefault(); handleScreenshotAttempt(); return; }
+  if (e.key === 'F12') { e.preventDefault(); showWarningToast('🚫 Developer tools are DISABLED!'); return; }
   if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) { e.preventDefault(); return; }
   if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); return; }
   if (e.ctrlKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return; }
-  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); showWarningToast('⚠ Copying is disabled!'); return; }
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); showWarningToast('🚫 Copying is DISABLED!'); return; }
 });
 
-// ── Tab/App switching detection (covers mobile app switch + desktop tab switch) ──
 document.addEventListener('visibilitychange', function () {
   if (!quizActive) return;
   if (document.hidden) {
-    // Show overlay IMMEDIATELY so any screenshot captures a black screen
     showScreenshotOverlay();
     tabSwitchCount++;
     if (tabSwitchCount >= 3) {
-      showWarningToast('🚫 Too many tab/app switches! Auto-submitting quiz...');
+      showWarningToast('🚫 VIOLATION: 3 tab switches detected! Your quiz is being auto-submitted.');
       setTimeout(() => { hideScreenshotOverlay(); forceFinishQuiz(); }, 1500);
     } else {
-      showWarningToast(`⚠ WARNING ${tabSwitchCount}/3: Do NOT switch tabs/apps! Your quiz will be auto-submitted.`);
+      showWarningToast(`⚠ WARNING ${tabSwitchCount}/3 — Tab switch detected! ${3 - tabSwitchCount} more and your quiz will be auto-submitted.`);
     }
   } else {
-    // User came back — hide overlay after a short delay
     setTimeout(() => hideScreenshotOverlay(), 800);
   }
 });
 
-// ── Blur detection (catches app switches that visibilitychange misses on some mobile browsers) ──
-window.addEventListener('blur', function () {
-  if (!quizActive) return;
-  // On mobile, blur fires when switching apps even if visibilitychange doesn't
-  showScreenshotOverlay();
-});
-window.addEventListener('focus', function () {
-  if (!quizActive) return;
-  setTimeout(() => hideScreenshotOverlay(), 800);
-});
+window.addEventListener('blur', function () { if (quizActive) showScreenshotOverlay(); });
+window.addEventListener('focus', function () { if (quizActive) setTimeout(() => hideScreenshotOverlay(), 800); });
 
-// ── Split screen / picture-in-picture detection via resize ──
 window.addEventListener('resize', function () {
   if (!quizActive) return;
-  const currentHeight = window.innerHeight;
-  const ratio = currentHeight / originalViewportHeight;
-
-  // If viewport shrinks to less than 70% of original → split screen detected
+  const ratio = window.innerHeight / originalViewportHeight;
   if (ratio < 0.70 && !splitScreenDetected) {
     splitScreenDetected = true;
     tabSwitchCount++;
     showScreenshotOverlay();
     if (tabSwitchCount >= 3) {
-      showWarningToast('🚫 Split screen detected! Auto-submitting quiz...');
+      showWarningToast('🚫 VIOLATION: Split screen detected! Your quiz is being auto-submitted.');
       setTimeout(() => { hideScreenshotOverlay(); forceFinishQuiz(); }, 1500);
     } else {
-      showWarningToast(`⚠ WARNING ${tabSwitchCount}/3: Split screen detected! Do NOT use split view.`);
+      showWarningToast(`⚠ WARNING ${tabSwitchCount}/3 — Split screen detected! Do NOT use split view.`);
       setTimeout(() => hideScreenshotOverlay(), 2000);
     }
   }
-  // Reset split screen flag when viewport returns to normal
-  if (ratio >= 0.85) {
-    splitScreenDetected = false;
-  }
+  if (ratio >= 0.85) splitScreenDetected = false;
 });
 
 function showWarningToast(msg) {
@@ -192,7 +147,7 @@ function showWarningToast(msg) {
   toast._timeout = setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(-50%) translateY(-20px)';
-  }, 3000);
+  }, 4000);
 }
 
 function enableAntiCheat() {
@@ -201,12 +156,12 @@ function enableAntiCheat() {
   screenshotCount = 0;
   splitScreenDetected = false;
   originalViewportHeight = window.innerHeight;
-  // CSS protections
   document.body.style.userSelect = 'none';
   document.body.style.webkitUserSelect = 'none';
-  document.body.style.webkitTouchCallout = 'none';  // Prevent iOS long-press menus
-  document.body.style.touchAction = 'manipulation';  // Disable double-tap zoom
+  document.body.style.webkitTouchCallout = 'none';
+  document.body.style.touchAction = 'manipulation';
 }
+
 function disableAntiCheat() {
   quizActive = false;
   document.body.style.userSelect = '';
@@ -216,65 +171,48 @@ function disableAntiCheat() {
   hideScreenshotOverlay();
 }
 
-// ═══════════════════════════════════════════════
-// SCREENSHOT DETECTION & BLOCKING
-// ═══════════════════════════════════════════════
 function handleScreenshotAttempt() {
   if (!quizActive) return;
   screenshotCount++;
-
-  // Clear clipboard to prevent screenshot data
-  try {
-    navigator.clipboard.writeText('📛 SCREENSHOT BLOCKED — InnovateX Anti-Cheat').catch(() => { });
-  } catch (e) { /* clipboard API may not be available */ }
-
-  // Show blocking overlay briefly
+  try { navigator.clipboard.writeText('📛 SCREENSHOT BLOCKED').catch(() => { }); } catch (e) { }
   showScreenshotOverlay();
-
   if (screenshotCount >= 3) {
-    showWarningToast('🚫 CHEATING DETECTED! 3 screenshot attempts — Auto-submitting quiz...');
-    setTimeout(() => {
-      hideScreenshotOverlay();
-      forceFinishQuiz();
-    }, 2000);
+    showWarningToast('🚫 VIOLATION: 3 screenshot attempts! Your quiz is being auto-submitted.');
+    setTimeout(() => { hideScreenshotOverlay(); forceFinishQuiz(); }, 2000);
   } else {
-    showWarningToast(`📸 WARNING ${screenshotCount}/3: Screenshot attempt detected! Your quiz will be auto-submitted after 3 attempts.`);
+    showWarningToast(`⚠ WARNING ${screenshotCount}/3 — Screenshot detected! ${3 - screenshotCount} more and your quiz will be auto-submitted.`);
     setTimeout(() => hideScreenshotOverlay(), 1500);
   }
 }
 
 function showScreenshotOverlay() {
-  let overlay = document.getElementById('screenshotBlockOverlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'screenshotBlockOverlay';
-    overlay.className = 'screenshot-overlay';
-    overlay.innerHTML = `
-      <div style="font-size:3rem;">🚫</div>
-      <div>SCREENSHOT BLOCKED</div>
-      <div style="font-size:0.7rem;color:var(--muted);letter-spacing:1px;">Anti-cheat system active</div>
-    `;
-    document.body.appendChild(overlay);
+  let ov = document.getElementById('screenshotBlockOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'screenshotBlockOverlay';
+    ov.className = 'screenshot-overlay';
+    ov.innerHTML = '<div style="font-size:3rem;">🚫</div><div>SCREENSHOT BLOCKED</div><div style="font-size:0.7rem;color:var(--muted);">Anti-cheat system active</div>';
+    document.body.appendChild(ov);
   }
-  overlay.classList.add('active');
+  ov.classList.add('active');
 }
 
 function hideScreenshotOverlay() {
-  const overlay = document.getElementById('screenshotBlockOverlay');
-  if (overlay) overlay.classList.remove('active');
+  const ov = document.getElementById('screenshotBlockOverlay');
+  if (ov) ov.classList.remove('active');
 }
 
-// ═══════════════════════════════════════════════
-// SCREENS
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// SCREEN NAVIGATION
+// ═══════════════════════════════════════════════════════════
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-// ═══════════════════════════════════════════════
-// ADMIN AUTH (now server-side)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ADMIN AUTH
+// ═══════════════════════════════════════════════════════════
 function promptAdmin() {
   document.getElementById('adminModal').style.display = 'flex';
   document.getElementById('adminPwd').value = '';
@@ -282,104 +220,99 @@ function promptAdmin() {
   setTimeout(() => document.getElementById('adminPwd').focus(), 100);
 }
 function closeAdminModal() { document.getElementById('adminModal').style.display = 'none'; }
-
-async function checkAdmin() {
-  const pwd = document.getElementById('adminPwd').value;
-  const res = await api('/admin/login', { method: 'POST', body: JSON.stringify({ password: pwd }) });
-  if (res.success) {
+function checkAdmin() {
+  if (document.getElementById('adminPwd').value === ADMIN_PASSWORD) {
     closeAdminModal();
     showScreen('admin');
-    await loadQuestions();
-    renderAdminQuestions();
-    await loadSettings();
   } else {
     document.getElementById('adminErr').style.display = 'block';
   }
 }
 
-// ═══════════════════════════════════════════════
-// REGISTRATION (via API)
-// ═══════════════════════════════════════════════
-async function submitRegistration() {
+// ═══════════════════════════════════════════════════════════
+// ADMIN — REGISTER PARTICIPANT
+// ═══════════════════════════════════════════════════════════
+async function registerParticipant() {
   const name = document.getElementById('regName').value.trim();
-  const roll = document.getElementById('regRoll').value.trim();
+  const college = document.getElementById('regCollege').value.trim();
   const year = document.getElementById('regYear').value;
   const dept = document.getElementById('regDept').value;
-  const phone = document.getElementById('regPhone').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const college = document.getElementById('regCollege').value.trim() || 'CSI College of Engineering';
 
-  if (!name || !roll || !year || !dept) { alert('Please fill all required fields.'); return; }
-
-  const res = await api('/registrations', {
-    method: 'POST',
-    body: JSON.stringify({ name, roll, year, dept, phone, email, college })
-  });
-
-  if (!res.success) {
-    alert(res.errors ? res.errors.join('\n') : res.error || 'Registration failed.');
+  if (!name || !college || !year || !dept) {
+    alert('Please fill all required fields (Name, College, Year, Department).');
     return;
   }
 
-  lastRegData = res.registration;
-  document.getElementById('regSuccessName').textContent = name.toUpperCase();
-  document.getElementById('regIdDisplay').textContent = res.registration.regId;
-  document.getElementById('regFormCard').style.display = 'none';
-  document.getElementById('regSuccessCard').style.display = 'block';
+  try {
+    const res = await fetch(`${API}/registrations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, college, year, dept })
+    });
+    const data = await res.json();
+    if (data.success) {
+      // Show success with Register ID
+      document.getElementById('regSuccessName').textContent = data.registration.name.toUpperCase();
+      document.getElementById('regIdDisplay').textContent = data.registration.regId;
+      document.getElementById('regSuccessCard').style.display = 'block';
+    } else {
+      alert(data.errors ? data.errors.join('\n') : 'Registration failed.');
+    }
+  } catch (e) {
+    alert('Network error. Check server.');
+  }
 }
 
-function resetReg() {
-  document.getElementById('regFormCard').style.display = 'block';
-  document.getElementById('regSuccessCard').style.display = 'none';
-  ['regName', 'regRoll', 'regPhone', 'regEmail', 'regCollege'].forEach(id => document.getElementById(id).value = '');
+function resetRegForm() {
+  document.getElementById('regName').value = '';
+  document.getElementById('regCollege').value = '';
   document.getElementById('regYear').value = '';
   document.getElementById('regDept').value = '';
-  lastRegData = null;
+  document.getElementById('regSuccessCard').style.display = 'none';
 }
 
-function goToQuizFromReg() {
-  if (lastRegData) {
-    document.getElementById('participantName').value = lastRegData.name;
-    document.getElementById('rollNum').value = lastRegData.roll;
-    document.getElementById('dept').value = lastRegData.dept;
-    startQuizDirect(lastRegData.name, lastRegData.roll, lastRegData.dept);
-  } else { showScreen('nameEntry'); }
-}
-
-// ═══════════════════════════════════════════════
-// QUIZ (start via API, score server-side)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// TAKE QUIZ — Login via API
+// ═══════════════════════════════════════════════════════════
 async function startQuiz() {
   const name = document.getElementById('participantName').value.trim();
-  const roll = document.getElementById('rollNum').value.trim();
-  const dept = document.getElementById('dept').value.trim();
-  if (!name || !roll) { alert('Please enter your name and roll number.'); return; }
-  await startQuizDirect(name, roll, dept);
-}
+  const regId = document.getElementById('participantRegId').value.trim().toUpperCase();
 
-async function startQuizDirect(name, roll, dept) {
-  const res = await api('/quiz/start', {
-    method: 'POST',
-    body: JSON.stringify({ name, roll, dept })
-  });
-
-  if (!res.success) {
-    alert(res.error || 'Could not start quiz.');
+  if (!name || !regId) {
+    alert('Please enter your Name and Register ID.');
     return;
   }
 
-  currentParticipant = res.participant;
-  quizQuestions = res.questions;
-  settings = res.settings;
+  try {
+    const res = await fetch(`${API}/quiz/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, regId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      quizQuestions = data.questions;
+      settings = data.settings;
+      currentParticipant = data.participant; // includes name, regId, dept
 
-  document.getElementById('quizParticipantName').textContent = name.toUpperCase();
-  currentQ = 0; correctCount = 0; wrongCount = 0; totalTimeTaken = 0;
-  answerLog = [];
-  enableAntiCheat();
-  showScreen('quiz');
-  renderQuestion();
+      currentQ = 0;
+      correctCount = 0;
+      totalTimeTaken = 0;
+
+      enableAntiCheat();
+      showScreen('quiz');
+      renderQuestion();
+    } else {
+      alert(data.error || 'Could not start quiz.');
+    }
+  } catch (e) {
+    alert('Network error. Check server.');
+  }
 }
 
+// ═══════════════════════════════════════════════════════════
+// QUIZ ENGINE
+// ═══════════════════════════════════════════════════════════
 function renderQuestion() {
   const q = quizQuestions[currentQ];
   const total = quizQuestions.length;
@@ -407,9 +340,11 @@ function renderQuestion() {
 
 function startTimer() {
   clearInterval(timerInterval);
-  timeLeft = settings.timer; updateTimerUI();
+  timeLeft = settings.timer;
+  updateTimerUI();
   timerInterval = setInterval(() => {
-    timeLeft--; updateTimerUI();
+    timeLeft--;
+    updateTimerUI();
     if (timeLeft <= 0) { clearInterval(timerInterval); if (!answered) autoSkip(); }
   }, 1000);
 }
@@ -418,19 +353,20 @@ function updateTimerUI() {
   const pct = timeLeft / settings.timer;
   const offset = 188 - (pct * 188);
   const circle = document.getElementById('timerCircle');
-  const numEl = document.getElementById('timerNum');
+  const num = document.getElementById('timerNum');
   circle.style.strokeDashoffset = offset;
-  numEl.textContent = timeLeft;
-  if (pct <= 0.33) { circle.style.stroke = 'var(--red)'; numEl.style.color = 'var(--red)'; numEl.classList.add('pulsing'); }
-  else if (pct <= 0.6) { circle.style.stroke = 'var(--accent2)'; numEl.style.color = 'var(--accent2)'; numEl.classList.remove('pulsing'); }
-  else { circle.style.stroke = 'var(--accent)'; numEl.style.color = 'var(--accent)'; numEl.classList.remove('pulsing'); }
+  num.textContent = timeLeft;
+  if (pct <= 0.33) { circle.style.stroke = 'var(--red)'; num.style.color = 'var(--red)'; num.classList.add('pulsing'); }
+  else if (pct <= 0.6) { circle.style.stroke = 'var(--accent2)'; num.style.color = 'var(--accent2)'; num.classList.remove('pulsing'); }
+  else { circle.style.stroke = 'var(--accent)'; num.style.color = 'var(--accent)'; num.classList.remove('pulsing'); }
 }
 
-function selectAnswer(selected) {
-  selectedOption = selected;
+function selectAnswer(sel) {
+  if (answered) return;
+  selectedOption = sel;
   document.querySelectorAll('.option').forEach((el, i) => {
     el.classList.remove('selected');
-    if (i === selected) el.classList.add('selected');
+    if (i === sel) el.classList.add('selected');
   });
   document.getElementById('nextBtn').style.display = 'inline-flex';
 }
@@ -444,102 +380,66 @@ function autoSkip() {
 
 function nextQuestion() {
   const q = quizQuestions[currentQ];
-  // Log answer for server submission
-  answerLog.push({
-    questionId: q.id,
-    selected: selectedOption
-  });
+  const qLogEntry = { questionId: q.id, selected: selectedOption };
+  if (!window._ansLog) window._ansLog = [];
+  window._ansLog.push(qLogEntry);
 
   totalTimeTaken += (selectedOption === -1) ? settings.timer : (settings.timer - timeLeft);
   answered = true;
   clearInterval(timerInterval);
   currentQ++;
-  selectedOption = -1;
-  if (currentQ >= quizQuestions.length) finishQuiz();
+  if (currentQ >= quizQuestions.length) submitQuiz();
   else renderQuestion();
 }
 
-async function forceFinishQuiz() {
+function forceFinishQuiz() {
   if (!quizActive) return;
-  // Log remaining unanswered
+  if (!window._ansLog) window._ansLog = [];
   while (currentQ < quizQuestions.length) {
-    answerLog.push({ questionId: quizQuestions[currentQ].id, selected: -1 });
+    window._ansLog.push({ questionId: quizQuestions[currentQ].id, selected: -1 });
     totalTimeTaken += settings.timer;
     currentQ++;
   }
-  await finishQuiz();
+  submitQuiz();
 }
 
-async function finishQuiz() {
+async function submitQuiz() {
   clearInterval(timerInterval);
   disableAntiCheat();
 
-  const res = await api('/quiz/submit', {
-    method: 'POST',
-    body: JSON.stringify({
-      name: currentParticipant.name,
-      roll: currentParticipant.roll,
-      dept: currentParticipant.dept,
-      answers: answerLog,
-      timeTaken: totalTimeTaken,
-      screenshotAttempts: screenshotCount,
-      flaggedCheater: screenshotCount >= 3
-    })
-  });
+  const payload = {
+    name: currentParticipant.name,
+    regId: currentParticipant.regId,
+    dept: currentParticipant.dept,
+    answers: window._ansLog || [],
+    timeTaken: totalTimeTaken,
+    screenshotAttempts: screenshotCount,
+    tabSwitches: tabSwitchCount,
+    flaggedCheater: (screenshotCount >= 3 || tabSwitchCount >= 3)
+  };
 
-  if (!res.success) {
-    alert(res.error || 'Failed to submit quiz.');
-    showScreen('home');
-    return;
-  }
-
-  document.getElementById('tyName').textContent = currentParticipant.name;
-  showScreen('thankyou');
-}
-
-// ═══════════════════════════════════════════════
-// LEADERBOARD (from API)
-// ═══════════════════════════════════════════════
-async function renderLeaderboard() {
-  const res = await api('/results');
-  leaderboard = res.success ? res.results : [];
-
-  // Render in admin tab (lbBody2)
-  const tbody = document.getElementById('lbBody2');
-  const empty = document.getElementById('lbEmpty2');
-  tbody.innerHTML = '';
-  if (leaderboard.length === 0) { empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-  const medals = ['🥇', '🥈', '🥉'], cls = ['gold', 'silver', 'bronze'];
-  leaderboard.forEach((e, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><span class="rank ${cls[i] || ''}">${medals[i] || i + 1}</span></td><td class="lb-name">${e.name}</td><td class="lb-time">${e.roll}</td><td class="lb-time">${e.dept}</td><td class="lb-score">${e.score}%</td><td>${e.correct}/${e.total}</td><td class="lb-time">${e.time}s</td>`;
-    tbody.appendChild(tr);
-  });
-
-  // Also render in public leaderboard screen (lbBody)
-  const tbody2 = document.getElementById('lbBody');
-  const empty2 = document.getElementById('lbEmpty');
-  if (tbody2) {
-    tbody2.innerHTML = '';
-    if (leaderboard.length === 0) { if (empty2) empty2.style.display = 'block'; return; }
-    if (empty2) empty2.style.display = 'none';
-    leaderboard.forEach((e, i) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td><span class="rank ${cls[i] || ''}">${medals[i] || i + 1}</span></td><td class="lb-name">${e.name}</td><td class="lb-time">${e.roll}</td><td class="lb-time">${e.dept}</td><td class="lb-score">${e.score}%</td><td>${e.correct}/${e.total}</td><td class="lb-time">${e.time}s</td>`;
-      tbody2.appendChild(tr);
+  try {
+    const res = await fetch(`${API}/quiz/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('tyName').textContent = currentParticipant.name;
+      showScreen('thankyou');
+      window._ansLog = [];
+    } else {
+      alert(data.error || 'Submission failed.');
+    }
+  } catch (e) {
+    alert('Network error during submission.');
   }
 }
 
-// ═══════════════════════════════════════════════
-// ADMIN — QUESTIONS (CRUD via API)
-// ═══════════════════════════════════════════════
-async function loadQuestions() {
-  const res = await api('/questions');
-  questions = res.success ? res.questions : [];
-}
-
+// ═══════════════════════════════════════════════════════════
+// ADMIN — TABS & DATA LOADING
+// ═══════════════════════════════════════════════════════════
 function switchTab(id, btn) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -547,35 +447,131 @@ function switchTab(id, btn) {
   if (btn) btn.classList.add('active');
 }
 
-function renderAdminQuestions() {
-  const list = document.getElementById('questionList');
-  list.innerHTML = '';
-  if (questions.length === 0) { list.innerHTML = '<div class="empty-state">No questions yet.</div>'; return; }
-  const labels = ['A', 'B', 'C', 'D'];
-  questions.forEach((q, i) => {
-    const div = document.createElement('div');
-    div.className = 'q-item';
-    div.innerHTML = `
-      <div class="q-item-text">Q${i + 1}. ${q.q}<span class="q-topic-badge">${q.topic}</span><span class="badge ${q.diff === 'easy' ? 'badge-blue' : 'badge-green'}" style="margin-left:4px;">${q.diff.toUpperCase()}</span></div>
-      <div class="q-item-opts">${q.opts.map((o, j) => `${labels[j]}) ${o}${j === q.ans ? '<span class="q-correct-badge">✓</span>' : ''}`).join(' &nbsp;')}</div>
-      <div class="q-item-actions">
-        <button class="btn btn-secondary btn-sm" onclick="editQuestion(${q.id})">✏</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteQuestion(${q.id})">✕</button>
-      </div>`;
-    list.appendChild(div);
-  });
+async function renderAdminRegs() {
+  const tbody = document.getElementById('adminRegBody');
+  const empty = document.getElementById('adminRegEmpty');
+  tbody.innerHTML = '';
+  try {
+    const res = await fetch(`${API}/registrations`);
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('regCount').textContent = data.count;
+      if (data.count === 0) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      data.registrations.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        let status = '<span class="badge badge-blue">PENDING</span>';
+        if (r.quizDone) {
+          status = `<span class="badge badge-green">DONE</span>`;
+          // You could add logic here for cheat status if sent from backend
+        }
+        tr.innerHTML = `<td>${i + 1}</td><td style="font-family:'Orbitron',monospace;font-size:0.75rem;color:var(--accent);">${r.regId}</td><td>${r.name}</td><td style="font-size:0.85rem;">${r.college}</td><td>${r.year}</td><td>${r.dept}</td><td>${status}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) { console.error(e); }
 }
 
+async function renderAdminQuestions() {
+  const list = document.getElementById('questionList');
+  list.innerHTML = '';
+  try {
+    const res = await fetch(`${API}/questions`);
+    const data = await res.json();
+    if (data.success) {
+      questions = data.questions;
+      if (questions.length === 0) { list.innerHTML = '<div class="empty-state">No questions yet.</div>'; return; }
+      const labels = ['A', 'B', 'C', 'D'];
+      questions.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'q-item';
+        div.innerHTML = `
+          <div class="q-item-text">Q${i + 1}. ${q.q}<span class="q-topic-badge">${q.topic}</span><span class="badge ${q.diff === 'easy' ? 'badge-blue' : 'badge-green'}" style="margin-left:4px;">${q.diff.toUpperCase()}</span></div>
+          <div class="q-item-opts">${q.opts.map((o, j) => `${labels[j]}) ${o}${j === q.ans ? '<span class="q-correct-badge">✓</span>' : ''}`).join(' &nbsp;')}</div>
+          <div class="q-item-actions">
+            <button class="btn btn-secondary btn-sm" onclick="editQuestion(${q.id})">✏</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteQuestion(${q.id})">✕</button>
+          </div>`;
+        list.appendChild(div);
+      });
+    }
+  } catch (e) { console.error(e); }
+}
+
+async function renderAdminResults() {
+  const tbody = document.getElementById('adminResultsBody');
+  const empty = document.getElementById('adminResultsEmpty');
+  tbody.innerHTML = '';
+  try {
+    const res = await fetch(`${API}/results`);
+    const data = await res.json();
+    if (data.success) {
+      const sorted = data.results;
+      if (sorted.length === 0) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      sorted.forEach((e, i) => {
+        const tr = document.createElement('tr');
+        const statusBadge = e.flaggedCheater
+          ? `<span class="badge" style="background:rgba(255,61,90,0.15);color:var(--red);border:1px solid var(--red);">🚫 CHEAT</span>`
+          : '<span class="badge badge-green">CLEAN</span>';
+
+        tr.innerHTML = `<td>${i + 1}</td><td>${e.name}</td><td style="font-family:'Orbitron',monospace;font-size:0.75rem;color:var(--accent);">${e.regId}</td><td style="font-size:0.85rem;">${e.college || 'CSI'}</td><td>${e.dept}</td><td class="lb-score">${e.score}%</td><td>${e.correct}/${e.total}</td><td class="lb-time">${e.time}s</td><td>${statusBadge}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ── CRUD Helpers ──
+let editingIdx = -1;
 function toggleAddForm() {
-  editingId = -1; clearForm();
+  editingIdx = -1; clearForm();
   document.getElementById('formTitle').textContent = 'ADD QUESTION';
   document.getElementById('qForm').classList.toggle('active');
+}
+
+function clearForm() {
+  document.getElementById('fQuestion').value = '';
+  [0, 1, 2, 3].forEach(i => { document.getElementById('fOpt' + i).value = ''; document.getElementById('r' + i).checked = false; });
+}
+
+function cancelForm() { clearForm(); document.getElementById('qForm').classList.remove('active'); editingIdx = -1; }
+
+async function saveQuestion() {
+  const qText = document.getElementById('fQuestion').value.trim();
+  const opts = [0, 1, 2, 3].map(i => document.getElementById('fOpt' + i).value.trim());
+  const checked = [...document.querySelectorAll('input[name=correct]')].find(r => r.checked);
+  const ans = checked ? parseInt(checked.value) : -1;
+  if (!qText || opts.some(o => !o) || ans < 0) { alert('Fill all fields and select correct answer.'); return; }
+
+  const payload = {
+    question: qText,
+    options: opts,
+    correct: ans,
+    topic: document.getElementById('fTopic').value,
+    difficulty: document.getElementById('fDifficulty').value
+  };
+
+  const url = editingIdx >= 0 ? `${API}/questions/${editingIdx}` : `${API}/questions`;
+  const method = editingIdx >= 0 ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if ((await res.json()).success) {
+      cancelForm();
+      renderAdminQuestions();
+    }
+  } catch (e) { alert('Error saving question.'); }
 }
 
 function editQuestion(id) {
   const q = questions.find(x => x.id === id);
   if (!q) return;
-  editingId = id;
+  editingIdx = id;
   document.getElementById('fQuestion').value = q.q;
   document.getElementById('fTopic').value = q.topic;
   document.getElementById('fDifficulty').value = q.diff;
@@ -586,166 +582,64 @@ function editQuestion(id) {
   document.getElementById('qForm').scrollIntoView({ behavior: 'smooth' });
 }
 
-async function saveQuestion() {
-  const q = document.getElementById('fQuestion').value.trim();
-  const opts = [0, 1, 2, 3].map(i => document.getElementById('fOpt' + i).value.trim());
-  const ans = parseInt([...document.querySelectorAll('input[name=correct]')].find(r => r.checked)?.value ?? -1);
-  if (!q || opts.some(o => !o) || ans < 0) { alert('Fill all fields and select correct answer.'); return; }
-
-  const payload = {
-    q, opts, ans,
-    topic: document.getElementById('fTopic').value,
-    diff: document.getElementById('fDifficulty').value
-  };
-
-  let res;
-  if (editingId >= 0) {
-    res = await api(`/questions/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
-  } else {
-    res = await api('/questions', { method: 'POST', body: JSON.stringify(payload) });
-  }
-
-  if (!res.success) { alert(res.errors ? res.errors.join('\n') : res.error || 'Save failed.'); return; }
-
-  cancelForm();
-  await loadQuestions();
-  renderAdminQuestions();
-}
-
-function cancelForm() { clearForm(); document.getElementById('qForm').classList.remove('active'); editingId = -1; }
-
-function clearForm() {
-  document.getElementById('fQuestion').value = '';
-  [0, 1, 2, 3].forEach(i => { document.getElementById('fOpt' + i).value = ''; document.getElementById('r' + i).checked = false; });
-}
-
 async function deleteQuestion(id) {
   if (!confirm('Delete?')) return;
-  await api(`/questions/${id}`, { method: 'DELETE' });
-  await loadQuestions();
-  renderAdminQuestions();
+  try {
+    const res = await fetch(`${API}/questions/${id}`, { method: 'DELETE' });
+    if ((await res.json()).success) renderAdminQuestions();
+  } catch (e) { alert('Error deleting.'); }
 }
 
-// ═══════════════════════════════════════════════
-// ADMIN — REGISTRATIONS (from API)
-// ═══════════════════════════════════════════════
-async function renderAdminRegs() {
-  const res = await api('/registrations');
-  registrations = res.success ? res.registrations : [];
-
-  const tbody = document.getElementById('adminRegBody');
-  const empty = document.getElementById('adminRegEmpty');
-  document.getElementById('regCount').textContent = registrations.length;
-  tbody.innerHTML = '';
-  if (registrations.length === 0) { empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-  registrations.forEach((r, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i + 1}</td><td style="font-family:'Orbitron',monospace;font-size:0.75rem;color:var(--accent);">${r.regId}</td><td>${r.name}</td><td>${r.roll}</td><td>${r.dept}</td><td>${r.year}</td><td>${r.phone || '—'}</td><td style="font-size:0.85rem;">${r.college}</td><td><span class="badge ${r.quizDone ? 'badge-green' : 'badge-blue'}">${r.quizDone ? 'DONE' : 'PENDING'}</span></td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-async function clearRegs() {
-  if (!confirm('Clear all registrations?')) return;
-  await api('/registrations', { method: 'DELETE' });
-  await renderAdminRegs();
-}
-
-// ═══════════════════════════════════════════════
-// ADMIN — SETTINGS (from API)
-// ═══════════════════════════════════════════════
-async function loadSettings() {
-  const res = await api('/settings');
-  if (res.success) {
-    settings = res.settings;
-    document.getElementById('sTimer').value = settings.timer;
-    document.getElementById('sQPerQuiz').value = settings.questionsPerQuiz;
-    document.getElementById('sShuffle').value = settings.shuffle ? '1' : '0';
-    document.getElementById('sShuffleOpts').value = settings.shuffleOpts ? '1' : '0';
-  }
+// ── Settings & Misc ──
+function loadSettingsUI() {
+  document.getElementById('sTimer').value = settings.timer;
+  document.getElementById('sQPerQuiz').value = settings.questionsPerQuiz;
+  document.getElementById('sShuffle').value = settings.shuffle ? '1' : '0';
+  document.getElementById('sShuffleOpts').value = settings.shuffleOpts ? '1' : '0';
 }
 
 async function saveSettings() {
   const payload = {
-    timer: parseInt(document.getElementById('sTimer').value) || 30,
-    questionsPerQuiz: parseInt(document.getElementById('sQPerQuiz').value) || 30,
-    shuffle: document.getElementById('sShuffle').value === '1',
-    shuffleOpts: document.getElementById('sShuffleOpts').value === '1'
+    timer: parseInt(document.getElementById('sTimer').value),
+    questionsPerQuiz: parseInt(document.getElementById('sQPerQuiz').value),
+    shuffle_questions: document.getElementById('sShuffle').value === '1',
+    shuffle_options: document.getElementById('sShuffleOpts').value === '1'
   };
-  const res = await api('/settings', { method: 'PUT', body: JSON.stringify(payload) });
-  if (res.success) {
-    settings = res.settings;
-    const s = document.getElementById('settingsSaved');
-    s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 2000);
-  }
+  try {
+    const res = await fetch(`${API}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if ((await res.json()).success) {
+      const status = document.getElementById('settingsSaved');
+      status.style.display = 'block';
+      setTimeout(() => status.style.display = 'none', 2000);
+      settings.timer = payload.timer;
+      settings.questionsPerQuiz = payload.questionsPerQuiz;
+      settings.shuffle = payload.shuffle_questions;
+      settings.shuffleOpts = payload.shuffle_options;
+    }
+  } catch (e) { alert('Error saving settings.'); }
 }
 
-// ═══════════════════════════════════════════════
-// ADMIN — RESULTS & LEADERBOARD
-// ═══════════════════════════════════════════════
-async function renderAdminResults() {
-  const res = await api('/results');
-  leaderboard = res.success ? res.results : [];
-
-  const tbody = document.getElementById('adminResultsBody');
-  const empty = document.getElementById('adminResultsEmpty');
-  tbody.innerHTML = '';
-  if (leaderboard.length === 0) { empty.style.display = 'block'; return; }
-  empty.style.display = 'none';
-  leaderboard.forEach((e, i) => {
-    const tr = document.createElement('tr');
-    const cheatBadge = e.flaggedCheater ? ' <span class="badge" style="background:rgba(255,61,90,0.15);color:var(--red);border:1px solid var(--red);margin-left:4px;">CHEAT</span>' : '';
-    const ssInfo = e.screenshotAttempts > 0 ? ` (📸${e.screenshotAttempts})` : '';
-    tr.innerHTML = `<td>${i + 1}</td><td>${e.name}${cheatBadge}</td><td>${e.roll}</td><td>${e.dept}</td><td>${e.score}%</td><td>${e.correct}/${e.total}</td><td>${e.time}s${ssInfo}</td>`;
-    tbody.appendChild(tr);
-  });
+async function clearRegs() {
+  if (!confirm('Clear ALL participants?')) return;
+  await fetch(`${API}/registrations`, { method: 'DELETE' });
+  renderAdminRegs();
 }
 
 async function clearLeaderboard() {
   if (!confirm('Clear all results?')) return;
-  await api('/results', { method: 'DELETE' });
-  leaderboard = [];
-  alert('Cleared!');
+  await fetch(`${API}/results`, { method: 'DELETE' });
+  renderAdminResults();
 }
 
 async function clearAttempts() {
-  if (!confirm('Clear all quiz attempts? This allows all members to retake the quiz.')) return;
-  await api('/results/attempts', { method: 'DELETE' });
-  alert('All attempts cleared! Members can retake the quiz.');
+  if (!confirm('Reset all attempts?')) return;
+  await fetch(`${API}/results/attempts`, { method: 'DELETE' });
+  alert('Attempts reset.');
 }
 
-// ═══════════════════════════════════════════════
-// CSV EXPORT (unchanged — client-side from current data)
-// ═══════════════════════════════════════════════
-function exportCSV() {
-  if (leaderboard.length === 0) { alert('No data!'); return; }
-  const h = ['Rank', 'Name', 'Roll No', 'Department', 'Score (%)', 'Correct', 'Total', 'Time (s)', 'Date'];
-  const r = leaderboard.map((e, i) => [i + 1, e.name, e.roll, e.dept, e.score, e.correct, e.total, e.time, e.date]);
-  dl([h, ...r], 'innovatex_results.csv');
-}
-
-function exportRegsCSV() {
-  if (registrations.length === 0) { alert('No registrations!'); return; }
-  const h = ['#', 'Reg ID', 'Name', 'Roll No', 'Year', 'Department', 'Phone', 'Email', 'College', 'Status', 'Date'];
-  const r = registrations.map((e, i) => [i + 1, e.regId, e.name, e.roll, e.year, e.dept, e.phone || '', e.email || '', e.college, e.quizDone ? 'Done' : 'Pending', e.date]);
-  dl([h, ...r], 'innovatex_registrations.csv');
-}
-
-function dl(rows, filename) {
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = filename; a.click();
-}
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; }
-  return a;
-}
-
-// ═══════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════
-document.getElementById('qForm').classList.remove('active');
+function exportCSV() { window.open(`${API}/results/export`); }
+function exportRegsCSV() { window.open(`${API}/registrations/export`); }

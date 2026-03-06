@@ -19,17 +19,23 @@ def start_quiz():
     (without correct answers) based on current settings.
     """
     data = request.get_json(silent=True) or {}
-    name = (data.get('name') or '').strip()
-    roll = (data.get('roll') or '').strip().upper()
-    dept = (data.get('dept') or '').strip()
+    reg_id = (data.get('regId') or '').strip().upper()
 
-    if not name or not roll:
-        return jsonify({'success': False, 'error': 'Name and roll number are required.'}), 400
+    if not name or not reg_id:
+        return jsonify({'success': False, 'error': 'Name and Register ID are required.'}), 400
+
+    # Verify registration exists
+    reg = Registration.query.filter_by(reg_id=reg_id).first()
+    if not reg:
+        return jsonify({'success': False, 'error': 'Invalid Register ID.'}), 404
+    
+    if reg.name.lower() != name.lower():
+        return jsonify({'success': False, 'error': 'Name does not match the registered user for this ID.'}), 403
 
     # Check one-time attempt
-    existing = QuizAttempt.query.filter_by(roll=roll).first()
+    existing = QuizAttempt.query.filter_by(reg_id=reg_id).first()
     if existing:
-        return jsonify({'success': False, 'error': 'This roll number has already attempted the quiz.'}), 403
+        return jsonify({'success': False, 'error': 'This Register ID has already attempted the quiz.'}), 403
 
     # Get settings
     setting = QuizSetting.query.first()
@@ -132,7 +138,7 @@ def start_quiz():
         'success': True,
         'questions': questions_out,
         'settings': setting.to_dict(),
-        'participant': {'name': name, 'roll': roll, 'dept': dept}
+        'participant': {'name': name, 'regId': reg_id, 'dept': reg.dept}
     })
 
 
@@ -149,21 +155,19 @@ def submit_quiz():
     }
     """
     data = request.get_json(silent=True) or {}
-    name = (data.get('name') or '').strip()
-    roll = (data.get('roll') or '').strip().upper()
-    dept = (data.get('dept') or '').strip()
+    reg_id = (data.get('regId') or '').strip().upper()
     answers = data.get('answers', [])
     time_taken = data.get('timeTaken', 0)
     screenshot_attempts = data.get('screenshotAttempts', 0)
     flagged_cheater = data.get('flaggedCheater', False)
 
-    if not name or not roll:
-        return jsonify({'success': False, 'error': 'Name and roll number are required.'}), 400
+    if not name or not reg_id:
+        return jsonify({'success': False, 'error': 'Name and Register ID are required.'}), 400
 
     # Prevent double-submit
-    existing = QuizAttempt.query.filter_by(roll=roll).first()
+    existing = QuizAttempt.query.filter_by(reg_id=reg_id).first()
     if existing:
-        return jsonify({'success': False, 'error': 'Quiz already submitted for this roll number.'}), 403
+        return jsonify({'success': False, 'error': 'Quiz already submitted for this ID.'}), 403
 
     # Score answers
     correct_count = 0
@@ -180,7 +184,7 @@ def submit_quiz():
 
     # Save result
     result = QuizResult(
-        name=name, roll=roll, dept=dept,
+        name=name, reg_id=reg_id, dept=dept,
         score=score, correct_count=correct_count,
         total_questions=total, time_taken=time_taken,
         screenshot_attempts=screenshot_attempts,
@@ -189,11 +193,11 @@ def submit_quiz():
     db.session.add(result)
 
     # Mark as attempted
-    attempt = QuizAttempt(roll=roll)
+    attempt = QuizAttempt(reg_id=reg_id)
     db.session.add(attempt)
 
     # Update registration quiz_done flag
-    reg = Registration.query.filter_by(roll=roll).first()
+    reg = Registration.query.filter_by(reg_id=reg_id).first()
     if reg:
         reg.quiz_done = True
 

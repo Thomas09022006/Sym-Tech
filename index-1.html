@@ -9,7 +9,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -135,9 +135,9 @@
       <div class="admin-tabs">
         <button class="tab-btn active" onclick="switchTab('tabRegister',this)">📝 Register</button>
         <button class="tab-btn" onclick="switchTab('tabParticipants',this);renderAdminRegs()">👥 Participants</button>
-        <button class="tab-btn" onclick="switchTab('tabQuestions',this);renderAdminQuestions()">❓ Questions</button>
+        <button class="tab-btn" onclick="switchTab('tabQuestions',this)">❓ Questions</button>
         <button class="tab-btn" onclick="switchTab('tabResults',this);renderAdminResults()">📊 Results</button>
-        <button class="tab-btn" onclick="switchTab('tabSettings',this);loadSettingsUI()">⚙ Settings</button>
+        <button class="tab-btn" onclick="switchTab('tabSettings',this)">⚙ Settings</button>
       </div>
 
       <!-- ── Register Participant Tab ── -->
@@ -191,7 +191,7 @@
             —</div>
           <p style="color:var(--muted);font-size:0.82rem;margin-top:6px;">Give this ID to the participant for quiz
             access.</p>
-          <button class="btn btn-secondary btn-sm" onclick="resetRegForm()">+ REGISTER
+          <button class="btn btn-secondary btn-sm" onclick="resetRegForm()" style="margin-top:12px;">+ REGISTER
             ANOTHER</button>
         </div>
       </div>
@@ -358,7 +358,7 @@
     </div>
   </div>
 
-  <script src="js/script.js"></script>
+  <script src="script.js"></script>
 </body>
 
 </html>
