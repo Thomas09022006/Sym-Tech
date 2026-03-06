@@ -10,13 +10,20 @@ results_bp = Blueprint('results', __name__)
 # ── GET  /api/v1/results ────────────────────────
 @results_bp.route('', methods=['GET'])
 def get_results():
-    results = QuizResult.query.order_by(
-        QuizResult.score.desc(), QuizResult.time_taken.asc()
-    ).all()
-    return jsonify({
-        'success': True,
-        'results': [r.to_dict() for r in results]
-    })
+    try:
+        results = QuizResult.query.order_by(
+            QuizResult.score.desc(), QuizResult.time_taken.asc()
+        ).all()
+        return jsonify({
+            'success': True,
+            'results': [r.to_dict() for r in results]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'type': str(type(e))
+        }), 500
 
 
 # ── DELETE  /api/v1/results ─────────────────────
