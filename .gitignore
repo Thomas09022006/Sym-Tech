@@ -1,0 +1,21 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Deployment helper scripts (local only)
+deploy_schema.py
+seed_direct.py
+
+# OS
+.DS_Store
+Thumbs.db
