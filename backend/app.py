@@ -32,6 +32,7 @@ from backend.routes.quiz import quiz_bp
 from backend.routes.results import results_bp
 from backend.routes.settings import settings_bp
 from backend.routes.admin import admin_bp
+from backend.routes.debug import debug_bp
 
 
 def create_app():
@@ -54,6 +55,7 @@ def create_app():
     app.register_blueprint(results_bp,       url_prefix='/api/v1/results')
     app.register_blueprint(settings_bp,      url_prefix='/api/v1/settings')
     app.register_blueprint(admin_bp,         url_prefix='/api/v1/admin')
+    app.register_blueprint(debug_bp,         url_prefix='/api/v1/debug')
 
     # ── Serve frontend (local dev only) ─────────
     if not os.getenv('RENDER'):

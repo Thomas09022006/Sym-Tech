@@ -2,22 +2,38 @@ services:
   - type: web
     name: innovatex-quiz-api
     runtime: python
+
     buildCommand: pip install -r requirements.txt
+
     startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --timeout 120
+
     envVars:
-      - key: MYSQL_USER
-        sync: false
-      - key: MYSQL_PASSWORD
-        sync: false
-      - key: MYSQL_HOST
-        sync: false
-      - key: MYSQL_PORT
-        sync: false
-      - key: MYSQL_DB
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: FRONTEND_URL
-        sync: false
       - key: PYTHON_VERSION
         value: 3.10.0
+
+      - key: FRONTEND_URL
+        value: https://sym-tech-quiz.netlify.app
+
+      - key: RENDER
+        value: true
+
+      - key: MYSQL_USER
+        sync: false
+
+      - key: MYSQL_PASSWORD
+        sync: false
+
+      - key: MYSQL_HOST
+        sync: false
+
+      - key: MYSQL_PORT
+        sync: false
+
+      - key: MYSQL_DB
+        sync: false
+
+      - key: SECRET_KEY
+        sync: false
+
+      - key: ADMIN_PASSWORD
+        sync: false

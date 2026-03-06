@@ -19,6 +19,7 @@ def start_quiz():
     (without correct answers) based on current settings.
     """
     data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
     reg_id = (data.get('regId') or '').strip().upper()
 
     if not name or not reg_id:
@@ -155,7 +156,9 @@ def submit_quiz():
     }
     """
     data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
     reg_id = (data.get('regId') or '').strip().upper()
+    dept = (data.get('dept') or '').strip()
     answers = data.get('answers', [])
     time_taken = data.get('timeTaken', 0)
     screenshot_attempts = data.get('screenshotAttempts', 0)

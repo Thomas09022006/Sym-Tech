@@ -7,7 +7,7 @@ class QuizResult(db.Model):
 
     id              = db.Column(db.Integer, primary_key=True)
     name            = db.Column(db.String(100), nullable=False)
-    reg_id          = db.Column(db.String(30), nullable=False)
+    reg_id          = db.Column(db.String(30), name="roll", nullable=False)
     dept            = db.Column(db.String(20), default='')
     score           = db.Column(db.Integer, nullable=False)
     correct_count   = db.Column(db.Integer, nullable=False)
@@ -37,5 +37,5 @@ class QuizAttempt(db.Model):
     __tablename__ = 'quiz_attempts'
 
     id           = db.Column(db.Integer, primary_key=True)
-    reg_id       = db.Column(db.String(30), unique=True, nullable=False)
+    reg_id       = db.Column(db.String(30), name="roll", unique=True, nullable=False)
     attempted_at = db.Column(db.DateTime, default=datetime.utcnow)
