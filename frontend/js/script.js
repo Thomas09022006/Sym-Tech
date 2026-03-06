@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════════════════════════
 
 // ── API base URL ──
-const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? '/api/v1'
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? (window.location.port === '5000' ? '/api/v1' : 'http://127.0.0.1:5000/api/v1')
   : 'https://technical-quiz-dwt8.onrender.com/api/v1';
 
 // ── Static Config ──
