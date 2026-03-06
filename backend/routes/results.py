@@ -11,18 +11,16 @@ results_bp = Blueprint('results', __name__)
 @results_bp.route('', methods=['GET'])
 def get_results():
     try:
-        results = QuizResult.query.order_by(
-            QuizResult.score.desc(), QuizResult.time_taken.asc()
-        ).all()
+        # Debug: return empty list first
         return jsonify({
             'success': True,
-            'results': [r.to_dict() for r in results]
+            'results': [],
+            'debug': 'Route is functional'
         })
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e),
-            'type': str(type(e))
+            'error': str(e)
         }), 500
 
 
