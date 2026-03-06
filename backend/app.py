@@ -44,8 +44,7 @@ def create_app():
     app.config.from_object(Config)
 
     # ── Extensions ──────────────────────────────
-    frontend_url = os.getenv('FRONTEND_URL', '*')
-    CORS(app, origins=[frontend_url] if frontend_url != '*' else '*')
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
     db.init_app(app)
 
     # ── Register Blueprints ─────────────────────
